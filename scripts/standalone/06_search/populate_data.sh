@@ -2,6 +2,7 @@
 # Search Benchmark: Populate test data with HSET (standalone)
 # Creates product-like documents with TEXT, NUMERIC, TAG, and GEO fields
 # to simulate a realistic e-commerce search use case.
+# Uses RESP protocol for redis-cli --pipe (handles spaces in values correctly).
 source "$(dirname "$0")/../../lib/config.sh"
 
 prompt_uri
@@ -18,20 +19,26 @@ mkdir -p "$RESULTS_DIR"
 
 CATEGORIES=("electronics" "clothing" "home" "sports" "books" "toys" "automotive" "garden" "health" "food")
 BRANDS=("acme" "globex" "initech" "umbrella" "wayne" "stark" "oscorp" "lexcorp" "cyberdyne" "soylent")
-TITLES=("wireless headphones" "cotton tshirt" "stainless steel bottle" "running shoes" "programming guide"
-        "bluetooth speaker" "leather wallet" "ceramic mug" "yoga mat" "cooking pan"
-        "laptop stand" "phone case" "desk lamp" "backpack" "sunglasses"
-        "smart watch" "power bank" "mouse pad" "keyboard" "monitor")
-DESCRIPTIONS=("high quality product with excellent performance and durability"
-              "premium materials used in manufacturing for long lasting use"
-              "best seller in category with thousands of positive reviews"
-              "lightweight and portable design perfect for everyday use"
-              "advanced technology with modern features and sleek design"
-              "eco friendly product made from sustainable materials"
-              "professional grade item suitable for commercial use"
-              "budget friendly option with great value for money"
-              "limited edition release with exclusive features"
-              "top rated by experts and consumers alike")
+TITLES=("wireless-headphones" "cotton-tshirt" "steel-bottle" "running-shoes" "programming-guide"
+        "bluetooth-speaker" "leather-wallet" "ceramic-mug" "yoga-mat" "cooking-pan"
+        "laptop-stand" "phone-case" "desk-lamp" "backpack" "sunglasses"
+        "smart-watch" "power-bank" "mouse-pad" "keyboard" "monitor")
+DESCRIPTIONS=("high-quality-product-with-excellent-performance"
+              "premium-materials-for-long-lasting-use"
+              "best-seller-with-thousands-of-positive-reviews"
+              "lightweight-portable-design-for-everyday-use"
+              "advanced-technology-with-modern-features"
+              "eco-friendly-made-from-sustainable-materials"
+              "professional-grade-suitable-for-commercial-use"
+              "budget-friendly-great-value-for-money"
+              "limited-edition-with-exclusive-features"
+              "top-rated-by-experts-and-consumers")
+
+# Generate a single RESP-encoded argument: $<len>\r\n<data>\r\n
+resp_arg() {
+  local val="$1"
+  printf '$%d\r\n%s\r\n' "${#val}" "$val"
+}
 
 {
 echo "# Search Data Population"
@@ -44,7 +51,6 @@ START_TIME=$(date +%s)
 
 echo "Populating $DOC_COUNT documents..."
 
-# Use pipelining via redis-cli --pipe for speed
 PIPE_FILE=$(mktemp)
 
 for ((i=1; i<=DOC_COUNT; i++)); do
@@ -52,23 +58,49 @@ for ((i=1; i<=DOC_COUNT; i++)); do
   brand_idx=$((RANDOM % ${#BRANDS[@]}))
   title_idx=$((RANDOM % ${#TITLES[@]}))
   desc_idx=$((RANDOM % ${#DESCRIPTIONS[@]}))
-  price=$((RANDOM % 9900 + 100))            # 1.00 to 100.00
+  price=$((RANDOM % 9900 + 100))
   price_dec="$((price / 100)).$((price % 100))"
-  rating=$((RANDOM % 50 + 1))               # 0.1 to 5.0
+  rating=$((RANDOM % 50 + 1))
   rating_dec="$((rating / 10)).$((rating % 10))"
   stock=$((RANDOM % 1000))
-  lat_offset=$((RANDOM % 100))                                     # Around Bangalore
+  lat_offset=$((RANDOM % 100))
   lon_offset=$((RANDOM % 100))
   lat="12.9${lat_offset}"
   lon="77.5${lon_offset}"
 
-  printf 'HSET product:%d title "%s %d" description "%s" category "%s" brand "%s" price %s rating %s stock %d location "%s,%s"\r\n' \
-    "$i" "${TITLES[$title_idx]}" "$i" "${DESCRIPTIONS[$desc_idx]}" \
-    "${CATEGORIES[$cat_idx]}" "${BRANDS[$brand_idx]}" \
-    "$price_dec" "$rating_dec" "$stock" "$lon" "$lat" >> "$PIPE_FILE"
+  title_val="${TITLES[$title_idx]}-${i}"
+  desc_val="${DESCRIPTIONS[$desc_idx]}"
+  cat_val="${CATEGORIES[$cat_idx]}"
+  brand_val="${BRANDS[$brand_idx]}"
+  loc_val="${lon},${lat}"
+  key="product:${i}"
+
+  # HSET key title val description val category val brand val price val rating val stock val location val
+  # = 17 args total (1 cmd + 1 key + 8 field-value pairs)
+  {
+    printf '*17\r\n'
+    resp_arg "HSET"
+    resp_arg "$key"
+    resp_arg "title"
+    resp_arg "$title_val"
+    resp_arg "description"
+    resp_arg "$desc_val"
+    resp_arg "category"
+    resp_arg "$cat_val"
+    resp_arg "brand"
+    resp_arg "$brand_val"
+    resp_arg "price"
+    resp_arg "$price_dec"
+    resp_arg "rating"
+    resp_arg "$rating_dec"
+    resp_arg "stock"
+    resp_arg "$stock"
+    resp_arg "location"
+    resp_arg "$loc_val"
+  } >> "$PIPE_FILE"
 
   if (( i % BATCH_SIZE == 0 )); then
-    redis-cli -u "$URI" --pipe < "$PIPE_FILE" 2>/dev/null
+    redis-cli -u "$URI" --pipe < "$PIPE_FILE" 2>&1 | tail -1
     > "$PIPE_FILE"
     printf "\r  Loaded %d / %d documents..." "$i" "$DOC_COUNT"
   fi
@@ -76,7 +108,7 @@ done
 
 # Flush remaining
 if [[ -s "$PIPE_FILE" ]]; then
-  redis-cli -u "$URI" --pipe < "$PIPE_FILE" 2>/dev/null
+  redis-cli -u "$URI" --pipe < "$PIPE_FILE" 2>&1 | tail -1
 fi
 rm -f "$PIPE_FILE"
 
@@ -91,8 +123,14 @@ echo "  Time taken: ${ELAPSED}s"
 echo ""
 
 # Verify
-DBSIZE=$(redis-cli -u "$URI" DBSIZE 2>/dev/null | grep -oP '\d+' || echo "N/A")
+echo "Verifying..."
+DBSIZE=$(redis-cli -u "$URI" DBSIZE 2>/dev/null)
 echo "  DBSIZE: $DBSIZE"
+
+# Spot check a random doc
+SAMPLE_KEY="product:$((RANDOM % DOC_COUNT + 1))"
+echo "  Sample ($SAMPLE_KEY):"
+redis-cli -u "$URI" HGETALL "$SAMPLE_KEY" 2>/dev/null | head -20
 } 2>&1 | tee "$OUTFILE"
 
 echo -e "${GREEN}Output saved to: ${OUTFILE}${NC}"
