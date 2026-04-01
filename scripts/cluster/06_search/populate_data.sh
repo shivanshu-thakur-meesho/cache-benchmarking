@@ -53,8 +53,10 @@ for ((i=1; i<=DOC_COUNT; i++)); do
   rating=$((RANDOM % 50 + 1))
   rating_dec="$((rating / 10)).$((rating % 10))"
   stock=$((RANDOM % 1000))
-  lat="$(echo "scale=4; 12.9 + $((RANDOM % 100)) / 1000" | bc)"
-  lon="$(echo "scale=4; 77.5 + $((RANDOM % 100)) / 1000" | bc)"
+  lat_offset=$((RANDOM % 100))
+  lon_offset=$((RANDOM % 100))
+  lat="12.9${lat_offset}"
+  lon="77.5${lon_offset}"
 
   printf 'HSET product:%d title "%s %d" description "%s" category "%s" brand "%s" price %s rating %s stock %d location "%s,%s"\r\n' \
     "$i" "${TITLES[$title_idx]}" "$i" "${DESCRIPTIONS[$desc_idx]}" \
