@@ -240,6 +240,60 @@ EOF
     fi
   fi
 
+  # ── Search ──
+  if ls "$results_dir"/standalone_search_* 1>/dev/null 2>&1 || ls "$results_dir"/cluster_search_* 1>/dev/null 2>&1; then
+    cat >> "$report_file" << 'EOF'
+---
+
+## 6. Search (FT.*) Validation
+
+EOF
+    if ls "$results_dir"/standalone_search_* 1>/dev/null 2>&1; then
+      cat >> "$report_file" << 'EOF'
+### Standalone
+
+| Test | Ops/sec | P99 (ms) | P99.9 (ms) | Avg Latency (ms) |
+|------|---------|----------|------------|-------------------|
+EOF
+      for test_file in "$results_dir"/standalone_search_*.txt; do
+        local name=$(basename "$test_file" .txt | sed 's/standalone_search_//')
+        local data=$(parse_result "$test_file")
+        IFS='|' read -r ops p99 p999 avg <<< "$data"
+        if [[ "$ops" != "FILE_NOT_FOUND" && -n "$ops" ]]; then
+          echo "| ${name} | ${ops} | ${p99} | ${p999} | ${avg} |" >> "$report_file"
+        fi
+      done
+      echo "" >> "$report_file"
+
+      # Include compatibility results if present
+      if [[ -f "$results_dir/standalone_search_compatibility.txt" ]]; then
+        echo "#### Compatibility Check Results" >> "$report_file"
+        echo '```' >> "$report_file"
+        grep -E "^\s+\[(PASS|FAIL)\]" "$results_dir/standalone_search_compatibility.txt" >> "$report_file" 2>/dev/null
+        echo '```' >> "$report_file"
+        echo "" >> "$report_file"
+      fi
+    fi
+
+    if ls "$results_dir"/cluster_search_* 1>/dev/null 2>&1; then
+      cat >> "$report_file" << 'EOF'
+### Cluster
+
+| Test | Ops/sec | P99 (ms) | P99.9 (ms) | Avg Latency (ms) |
+|------|---------|----------|------------|-------------------|
+EOF
+      for test_file in "$results_dir"/cluster_search_*.txt; do
+        local name=$(basename "$test_file" .txt | sed 's/cluster_search_//')
+        local data=$(parse_result "$test_file")
+        IFS='|' read -r ops p99 p999 avg <<< "$data"
+        if [[ "$ops" != "FILE_NOT_FOUND" && -n "$ops" ]]; then
+          echo "| ${name} | ${ops} | ${p99} | ${p999} | ${avg} |" >> "$report_file"
+        fi
+      done
+      echo "" >> "$report_file"
+    fi
+  fi
+
   # ── Appendix: Commands Used ──
   cat >> "$report_file" << 'EOF'
 ---

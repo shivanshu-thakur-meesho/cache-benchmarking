@@ -133,10 +133,18 @@ scripts/
 │   ├── 04_ha_recovery/
 │   │   └── set_get_mixed.sh       # 1:1 SET/GET (kill master mid-test)
 │   │
-│   └── 05_eviction/
-│       ├── baseline.sh            # Baseline 256B, 60s
-│       ├── stress_2k.sh           # Eviction stress 2KB, 300s
-│       └── stress_4k.sh           # Eviction stress 4KB, 300s
+│   ├── 05_eviction/
+│   │   ├── baseline.sh            # Baseline 256B, 60s
+│   │   ├── stress_2k.sh           # Eviction stress 2KB, 300s
+│   │   └── stress_4k.sh           # Eviction stress 4KB, 300s
+│   │
+│   └── 06_search/
+│       ├── populate_data.sh       # Load 100K product docs
+│       ├── create_index.sh        # FT.CREATE + measure index build
+│       ├── compatibility_check.sh # Test all FT.* commands (PASS/FAIL)
+│       ├── bench_text_search.sh   # FT.SEARCH text queries via memtier
+│       ├── bench_filter_search.sh # FT.SEARCH filters via memtier
+│       └── bench_aggregate.sh     # FT.AGGREGATE via memtier
 │
 ├── cluster/
 │   ├── 01_inmemory/
@@ -152,10 +160,18 @@ scripts/
 │   ├── 04_ha_recovery/
 │   │   └── set_get_mixed.sh       # 1:1 SET/GET (cluster HA)
 │   │
-│   └── 05_eviction/
-│       ├── baseline.sh
-│       ├── stress_2k.sh
-│       └── stress_4k.sh
+│   ├── 05_eviction/
+│   │   ├── baseline.sh
+│   │   ├── stress_2k.sh
+│   │   └── stress_4k.sh
+│   │
+│   └── 06_search/
+│       ├── populate_data.sh       # Load docs (cluster, uses -c flag)
+│       ├── create_index.sh        # FT.CREATE (cluster)
+│       ├── compatibility_check.sh # Reuses standalone check
+│       ├── bench_text_search.sh   # FT.SEARCH (cluster-mode)
+│       ├── bench_filter_search.sh # FT.SEARCH filters (cluster-mode)
+│       └── bench_aggregate.sh     # FT.AGGREGATE (cluster-mode)
 │
 └── results/                        # Auto-created per run
     └── 20260401_143022/            # Timestamped directory
@@ -258,6 +274,58 @@ bash scripts/standalone/05_eviction/stress_4k.sh
 ```
 
 Compare P99/P999 across the three runs.
+
+### 6. Search (FT.*) Validation
+
+**Goal:** Validate RediSearch compatibility and search performance on Dragonfly.
+
+This tests FT.CREATE, FT.SEARCH, FT.AGGREGATE and other FT.* commands to ensure clusters using Redis Search can be migrated to Dragonfly.
+
+**Step-by-step:**
+
+```bash
+# Step 1: Populate test data (100K e-commerce product docs with TEXT/NUMERIC/TAG/GEO fields)
+bash scripts/standalone/06_search/populate_data.sh
+
+# Step 2: Create the search index and measure index build time
+bash scripts/standalone/06_search/create_index.sh
+
+# Step 3: Run compatibility check (tests every FT.* command, reports PASS/FAIL)
+bash scripts/standalone/06_search/compatibility_check.sh
+
+# Step 4: Benchmark FT.SEARCH text queries (simple, field-specific, wildcard)
+bash scripts/standalone/06_search/bench_text_search.sh
+
+# Step 5: Benchmark FT.SEARCH with filters (numeric range, tag, combined, sorted, NOCONTENT)
+bash scripts/standalone/06_search/bench_filter_search.sh
+
+# Step 6: Benchmark FT.AGGREGATE (GROUPBY+COUNT, GROUPBY+AVG, GROUPBY+SUM)
+bash scripts/standalone/06_search/bench_aggregate.sh
+```
+
+Or run everything at once via the CLI menu (option 28 for standalone, 19 for cluster).
+
+**What the compatibility check validates:**
+
+| Category | Commands Tested |
+|----------|-----------------|
+| Index Management | FT.CREATE, FT.DROPINDEX, FT.ALTER, FT.INFO, FT._LIST |
+| Text Search | Simple text, field-specific, boolean AND |
+| Filters | Numeric range, tag filter, multi-tag OR |
+| Query Options | NOCONTENT, SORTBY, LIMIT, RETURN |
+| Aggregation | GROUPBY + COUNT/AVG/SUM, SORTBY, LIMIT |
+| Config | FT.CONFIG SET/GET |
+| Synonyms | FT.SYNUPDATE, FT.SYNDUMP |
+| Profiling | FT.PROFILE SEARCH |
+| Autocomplete | FT.SUGADD, FT.SUGGET (expected to FAIL on Dragonfly) |
+
+**Known Dragonfly limitations:**
+- FT.SUGADD / FT.SUGGET (autocomplete) -- not supported
+- FT.AGGREGATE APPLY / FILTER -- not supported
+- Multiple PREFIX in FT.CREATE -- only `PREFIX 1` supported
+- Full-text scoring/relevance ranking -- limited
+
+**Throughput benchmarks use memtier** with `--command` flag to send FT.SEARCH and FT.AGGREGATE queries. This gives Ops/sec and P99/P99.9 latency. memtier works well for fixed query patterns but cannot randomize search terms within queries.
 
 ---
 

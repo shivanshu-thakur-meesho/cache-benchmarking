@@ -67,6 +67,15 @@ show_standalone_menu() {
   echo "    20) Stress 4KB"
   echo "    21) Run ALL eviction tests"
   echo ""
+  echo -e "  ${CYAN}Search (FT.*)${NC}"
+  echo "    22) Populate test data (100K docs)"
+  echo "    23) Create search index"
+  echo "    24) Compatibility check (all FT.* commands)"
+  echo "    25) Bench: text search (simple, field, wildcard)"
+  echo "    26) Bench: filter search (numeric, tag, combined, sorted)"
+  echo "    27) Bench: aggregation (count, avg, sum)"
+  echo "    28) Run ALL search tests (populate + index + all benchmarks)"
+  echo ""
   echo "    0)  Back to main menu"
   echo ""
   printf "Choice: "
@@ -96,6 +105,15 @@ show_cluster_menu() {
   echo "    10) Stress 2KB"
   echo "    11) Stress 4KB"
   echo "    12) Run ALL eviction tests"
+  echo ""
+  echo -e "  ${CYAN}Search (FT.*)${NC}"
+  echo "    13) Populate test data (100K docs)"
+  echo "    14) Create search index"
+  echo "    15) Compatibility check"
+  echo "    16) Bench: text search"
+  echo "    17) Bench: filter search"
+  echo "    18) Bench: aggregation"
+  echo "    19) Run ALL search tests"
   echo ""
   echo "    0)  Back to main menu"
   echo ""
@@ -157,6 +175,20 @@ handle_standalone() {
         run_script "standalone/05_eviction/stress_2k.sh"
         run_script "standalone/05_eviction/stress_4k.sh"
         ;;
+    22) run_script "standalone/06_search/populate_data.sh" ;;
+    23) run_script "standalone/06_search/create_index.sh" ;;
+    24) run_script "standalone/06_search/compatibility_check.sh" ;;
+    25) run_script "standalone/06_search/bench_text_search.sh" ;;
+    26) run_script "standalone/06_search/bench_filter_search.sh" ;;
+    27) run_script "standalone/06_search/bench_aggregate.sh" ;;
+    28) # Run all search
+        run_script "standalone/06_search/populate_data.sh"
+        run_script "standalone/06_search/create_index.sh"
+        run_script "standalone/06_search/compatibility_check.sh"
+        run_script "standalone/06_search/bench_text_search.sh"
+        run_script "standalone/06_search/bench_filter_search.sh"
+        run_script "standalone/06_search/bench_aggregate.sh"
+        ;;
     0)  return 1 ;;
     *)  echo -e "${RED}Invalid choice${NC}" ;;
   esac
@@ -184,6 +216,20 @@ handle_cluster() {
         run_script "cluster/05_eviction/baseline.sh"
         run_script "cluster/05_eviction/stress_2k.sh"
         run_script "cluster/05_eviction/stress_4k.sh"
+        ;;
+    13) run_script "cluster/06_search/populate_data.sh" ;;
+    14) run_script "cluster/06_search/create_index.sh" ;;
+    15) run_script "cluster/06_search/compatibility_check.sh" ;;
+    16) run_script "cluster/06_search/bench_text_search.sh" ;;
+    17) run_script "cluster/06_search/bench_filter_search.sh" ;;
+    18) run_script "cluster/06_search/bench_aggregate.sh" ;;
+    19) # Run all search cluster
+        run_script "cluster/06_search/populate_data.sh"
+        run_script "cluster/06_search/create_index.sh"
+        run_script "cluster/06_search/compatibility_check.sh"
+        run_script "cluster/06_search/bench_text_search.sh"
+        run_script "cluster/06_search/bench_filter_search.sh"
+        run_script "cluster/06_search/bench_aggregate.sh"
         ;;
     0)  return 1 ;;
     *)  echo -e "${RED}Invalid choice${NC}" ;;
