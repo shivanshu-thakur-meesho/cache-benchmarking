@@ -12,7 +12,8 @@ source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/report.sh"
 
 # Set a shared RESULTS_DIR for the entire session so all child scripts write here
-export RESULTS_DIR="${PROJECT_ROOT}/results/$(date +%Y%m%d_%H%M%S)"
+# If RESULTS_DIR is already set (e.g. via export), use that (allows resume)
+export RESULTS_DIR="${RESULTS_DIR:-${PROJECT_ROOT}/results/$(date +%Y%m%d_%H%M%S)}"
 
 # ── Banner ───────────────────────────────────────────────────────────
 show_banner() {
@@ -23,13 +24,59 @@ show_banner() {
   echo -e "${NC}"
 }
 
+# ── Resume session picker ────────────────────────────────────────────
+handle_resume() {
+  local results_base="${PROJECT_ROOT}/results"
+
+  if [[ ! -d "$results_base" ]] || [[ -z "$(ls -A "$results_base" 2>/dev/null)" ]]; then
+    echo -e "  ${RED}No previous sessions found.${NC}"
+    return 1
+  fi
+
+  echo ""
+  echo -e "${BOLD}Previous sessions:${NC}"
+  echo ""
+
+  local dirs=()
+  local idx=1
+  for d in "$results_base"/*/; do
+    if [[ -d "$d" ]]; then
+      local name=$(basename "$d")
+      local count=$(ls "$d"/*.txt 2>/dev/null | wc -l | tr -d ' ')
+      echo "  $idx) $name  ($count result files)"
+      dirs+=("$d")
+      idx=$((idx + 1))
+    fi
+  done
+
+  echo ""
+  printf "Select session to resume (number): "
+  read -r sel
+
+  if [[ "$sel" -ge 1 && "$sel" -le ${#dirs[@]} ]] 2>/dev/null; then
+    RESULTS_DIR="$(cd "${dirs[$((sel-1))]}" && pwd)"
+    export RESULTS_DIR
+    echo ""
+    echo -e "${GREEN}Resumed session: $(basename "$RESULTS_DIR")${NC}"
+    echo -e "New results will be added to: ${CYAN}${RESULTS_DIR}${NC}"
+    echo ""
+    return 0
+  else
+    echo -e "${RED}Invalid selection${NC}"
+    return 1
+  fi
+}
+
 # ── Main Menu ────────────────────────────────────────────────────────
 show_main_menu() {
-  echo -e "${BOLD}Select deployment mode:${NC}"
+  echo -e "${BOLD}Session: ${CYAN}$(basename "$RESULTS_DIR")${NC}"
+  echo ""
+  echo -e "${BOLD}Select:${NC}"
   echo ""
   echo "  1) Standalone"
   echo "  2) Cluster"
   echo "  3) Generate report from existing results"
+  echo "  4) Resume a previous session"
   echo "  0) Exit"
   echo ""
   printf "Choice: "
@@ -300,6 +347,7 @@ main() {
           done
           ;;
       3)  handle_report ;;
+      4)  handle_resume ;;
       0)  echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
       *)  echo -e "${RED}Invalid choice${NC}" ;;
     esac
