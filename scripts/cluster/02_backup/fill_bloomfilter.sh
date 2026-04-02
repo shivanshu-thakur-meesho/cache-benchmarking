@@ -2,6 +2,9 @@
 # Backup Test: Fill cache with Bloom Filters (cluster)
 source "$(dirname "$0")/../../lib/config.sh"
 
+set +e
+set +o pipefail
+
 prompt_uri
 
 printf "\n${BOLD}Bloom Filter Parameters${NC} ${YELLOW}(press Enter for default)${NC}\n"

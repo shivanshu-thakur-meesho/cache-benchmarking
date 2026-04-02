@@ -3,6 +3,9 @@
 # Creates product-like documents with TEXT, NUMERIC, TAG, and GEO fields
 source "$(dirname "$0")/../../lib/config.sh"
 
+set +e
+set +o pipefail
+
 prompt_uri
 
 printf "\n${BOLD}Data Population Parameters${NC} ${YELLOW}(press Enter for default)${NC}\n"

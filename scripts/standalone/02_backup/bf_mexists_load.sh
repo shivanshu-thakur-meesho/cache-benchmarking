@@ -3,6 +3,9 @@
 # Run this while triggering backup to observe impact
 source "$(dirname "$0")/../../lib/config.sh"
 
+set +e
+set +o pipefail
+
 prompt_uri
 
 printf "\n${BOLD}BF.MEXISTS Parameters${NC} ${YELLOW}(press Enter for default)${NC}\n"

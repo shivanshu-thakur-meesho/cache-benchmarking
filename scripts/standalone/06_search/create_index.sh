@@ -3,6 +3,10 @@
 # Creates a product index with TEXT, NUMERIC, TAG, and GEO fields
 source "$(dirname "$0")/../../lib/config.sh"
 
+# Disable strict errors — redis-cli and grep may return non-zero
+set +e
+set +o pipefail
+
 prompt_uri
 
 setup_result_dir

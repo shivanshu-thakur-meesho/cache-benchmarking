@@ -2,6 +2,9 @@
 # Search Benchmark: Create search index (cluster)
 source "$(dirname "$0")/../../lib/config.sh"
 
+set +e
+set +o pipefail
+
 prompt_uri
 
 setup_result_dir
