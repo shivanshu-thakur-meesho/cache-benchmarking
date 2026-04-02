@@ -4,11 +4,15 @@
 #  Interactive tool for running all validation benchmarks
 # ═══════════════════════════════════════════════════════════════════════
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/report.sh"
+
+# Set a shared RESULTS_DIR for the entire session so all child scripts write here
+export RESULTS_DIR="${PROJECT_ROOT}/results/$(date +%Y%m%d_%H%M%S)"
 
 # ── Banner ───────────────────────────────────────────────────────────
 show_banner() {
@@ -257,7 +261,7 @@ handle_report() {
       local count=$(ls "$d"/*.txt 2>/dev/null | wc -l | tr -d ' ')
       echo "  $idx) $name  ($count result files)"
       dirs+=("$d")
-      ((idx++))
+      idx=$((idx + 1))
     fi
   done
 

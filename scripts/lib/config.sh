@@ -93,7 +93,12 @@ configure_params() {
 }
 
 # ── Result capture ───────────────────────────────────────────────────
-RESULTS_DIR="${RESULTS_DIR:-$(dirname "$(dirname "$(realpath "$0")")")/../results/$(date +%Y%m%d_%H%M%S)}"
+# Resolve the scripts/ root reliably (this file is always at scripts/lib/config.sh)
+_CONFIG_SH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_SCRIPTS_ROOT="$(cd "$_CONFIG_SH_DIR/.." && pwd)"
+_PROJECT_ROOT="$(cd "$_SCRIPTS_ROOT/.." && pwd)"
+
+RESULTS_DIR="${RESULTS_DIR:-${_PROJECT_ROOT}/results/$(date +%Y%m%d_%H%M%S)}"
 
 setup_result_dir() {
   mkdir -p "$RESULTS_DIR"
