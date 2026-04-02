@@ -4,6 +4,10 @@
 # Tests each RediSearch command against Dragonfly and reports pass/fail
 source "$(dirname "$0")/../../lib/config.sh"
 
+# Disable strict error mode — this script expects some commands to fail
+set +e
+set +o pipefail
+
 prompt_uri
 
 setup_result_dir
@@ -18,21 +22,21 @@ run_test() {
   local name="$1"
   shift
   local result
-  result=$(redis-cli -u "$URI" "$@" 2>&1)
+  result=$(redis-cli -u "$URI" "$@" 2>&1) || true
   local exit_code=$?
 
-  if [[ $exit_code -eq 0 ]] && ! echo "$result" | grep -qi "ERR\|error\|unknown command\|not supported"; then
+  if [[ $exit_code -eq 0 ]] && [[ ! "$result" =~ ERR|error|"unknown command"|"not supported" ]]; then
     printf "  %-55s ${GREEN}PASS${NC}\n" "$name"
     echo "  [PASS] $name" >> "$OUTFILE"
     echo "         Command: $*" >> "$OUTFILE"
     echo "         Result: $(echo "$result" | head -5)" >> "$OUTFILE"
-    ((PASS++))
+    PASS=$((PASS + 1))
   else
     printf "  %-55s ${RED}FAIL${NC}\n" "$name"
     echo "  [FAIL] $name" >> "$OUTFILE"
     echo "         Command: $*" >> "$OUTFILE"
     echo "         Error: $(echo "$result" | head -5)" >> "$OUTFILE"
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
   fi
   echo "" >> "$OUTFILE"
 }
