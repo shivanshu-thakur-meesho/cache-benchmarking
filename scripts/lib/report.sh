@@ -29,9 +29,12 @@ parse_result() {
   p99=$(grep -E "^Totals" "$file" | tail -1 | awk '{print $7}' || echo "N/A")
   p999=$(grep -E "^Totals" "$file" | tail -1 | awk '{print $8}' || echo "N/A")
 
-  # If no Totals line, try alternate patterns
+  # If no Totals line, try run_search_bench output format
   if [[ -z "$ops" || "$ops" == "N/A" ]]; then
-    ops=$(grep -oP 'ops/sec:\s*\K[\d.]+' "$file" | tail -1 || echo "N/A")
+    ops=$(grep -oP 'Ops/sec:\s*\K[\d.]+' "$file" | tail -1 || echo "N/A")
+    p99=$(grep -oP 'p99 Latency:\s*\K[\d.]+' "$file" | tail -1 || echo "N/A")
+    p999=$(grep -oP 'p99\.9 Lat:\s*\K[\d.]+' "$file" | tail -1 || echo "N/A")
+    avg_latency=$(grep -oP 'Avg Latency:\s*\K[\d.]+' "$file" | tail -1 || echo "N/A")
   fi
 
   echo "${ops}|${p99}|${p999}|${avg_latency}"
