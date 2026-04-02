@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 # Search Benchmark: Populate test data with HSET (standalone)
 # Creates product-like documents with TEXT, NUMERIC, TAG, and GEO fields
-# to simulate a realistic e-commerce search use case.
-# Uses RESP protocol for redis-cli --pipe (handles spaces in values correctly).
 source "$(dirname "$0")/../../lib/config.sh"
 
 prompt_uri
 
 printf "\n${BOLD}Data Population Parameters${NC} ${YELLOW}(press Enter for default)${NC}\n"
 prompt_param DOC_COUNT       "doc-count"       "100000"
-prompt_param BATCH_SIZE      "batch-size"      "500"
+prompt_param BATCH_SIZE      "batch-size"      "1000"
 
 export DOC_COUNT BATCH_SIZE
 
@@ -34,10 +32,29 @@ DESCRIPTIONS=("high-quality-product-with-excellent-performance"
               "limited-edition-with-exclusive-features"
               "top-rated-by-experts-and-consumers")
 
-# Generate a single RESP-encoded argument: $<len>\r\n<data>\r\n
-resp_arg() {
-  local val="$1"
-  printf '$%d\r\n%s\r\n' "${#val}" "$val"
+# ── Progress bar ─────────────────────────────────────────────────────
+show_progress() {
+  local current="$1" total="$2" start_time="$3"
+  local pct=$((current * 100 / total))
+  local elapsed=$(( $(date +%s) - start_time ))
+  local rate=0
+  if [[ $elapsed -gt 0 ]]; then
+    rate=$((current / elapsed))
+  fi
+  local eta="--"
+  if [[ $rate -gt 0 ]]; then
+    local remaining=$(( (total - current) / rate ))
+    eta="${remaining}s"
+  fi
+
+  # Bar: 40 chars wide
+  local filled=$((pct * 40 / 100))
+  local empty=$((40 - filled))
+  local bar=""
+  for ((b=0; b<filled; b++)); do bar+="█"; done
+  for ((b=0; b<empty; b++)); do bar+="░"; done
+
+  printf "\r  [%s] %3d%% | %d/%d | %d keys/s | ETA: %s  " "$bar" "$pct" "$current" "$total" "$rate" "$eta"
 }
 
 {
@@ -47,11 +64,26 @@ echo "# Documents: $DOC_COUNT"
 echo "# Batch size: $BATCH_SIZE"
 echo ""
 
+# Quick connectivity check
+echo "Testing connection..."
+PING=$(redis-cli -u "$URI" PING 2>&1)
+if [[ "$PING" != *"PONG"* ]]; then
+  echo "ERROR: Cannot connect to $URI (got: $PING)"
+  exit 1
+fi
+echo "Connection OK."
+echo ""
+
+DBSIZE_BEFORE=$(redis-cli -u "$URI" DBSIZE 2>/dev/null)
+echo "DBSIZE before: $DBSIZE_BEFORE"
+echo ""
+
 START_TIME=$(date +%s)
-
 echo "Populating $DOC_COUNT documents..."
+echo ""
 
-PIPE_FILE=$(mktemp)
+BATCH_FILE=$(mktemp)
+ERRORS=0
 
 for ((i=1; i<=DOC_COUNT; i++)); do
   cat_idx=$((RANDOM % ${#CATEGORIES[@]}))
@@ -65,72 +97,58 @@ for ((i=1; i<=DOC_COUNT; i++)); do
   stock=$((RANDOM % 1000))
   lat_offset=$((RANDOM % 100))
   lon_offset=$((RANDOM % 100))
-  lat="12.9${lat_offset}"
-  lon="77.5${lon_offset}"
 
-  title_val="${TITLES[$title_idx]}-${i}"
-  desc_val="${DESCRIPTIONS[$desc_idx]}"
-  cat_val="${CATEGORIES[$cat_idx]}"
-  brand_val="${BRANDS[$brand_idx]}"
-  loc_val="${lon},${lat}"
-  key="product:${i}"
-
-  # HSET key title val description val category val brand val price val rating val stock val location val
-  # = 17 args total (1 cmd + 1 key + 8 field-value pairs)
-  {
-    printf '*17\r\n'
-    resp_arg "HSET"
-    resp_arg "$key"
-    resp_arg "title"
-    resp_arg "$title_val"
-    resp_arg "description"
-    resp_arg "$desc_val"
-    resp_arg "category"
-    resp_arg "$cat_val"
-    resp_arg "brand"
-    resp_arg "$brand_val"
-    resp_arg "price"
-    resp_arg "$price_dec"
-    resp_arg "rating"
-    resp_arg "$rating_dec"
-    resp_arg "stock"
-    resp_arg "$stock"
-    resp_arg "location"
-    resp_arg "$loc_val"
-  } >> "$PIPE_FILE"
+  # All values are single-word (hyphenated) so inline redis protocol works
+  echo "HSET product:${i} title ${TITLES[$title_idx]}-${i} description ${DESCRIPTIONS[$desc_idx]} category ${CATEGORIES[$cat_idx]} brand ${BRANDS[$brand_idx]} price ${price_dec} rating ${rating_dec} stock ${stock} location 77.5${lon_offset},12.9${lat_offset}" >> "$BATCH_FILE"
 
   if (( i % BATCH_SIZE == 0 )); then
-    redis-cli -u "$URI" --pipe < "$PIPE_FILE" 2>&1 | tail -1
-    > "$PIPE_FILE"
-    printf "\r  Loaded %d / %d documents..." "$i" "$DOC_COUNT"
+    # Send batch through a single redis-cli connection (not --pipe)
+    RESULT=$(redis-cli -u "$URI" < "$BATCH_FILE" 2>&1)
+    ERR_COUNT=$(echo "$RESULT" | grep -ci "err" || true)
+    ERRORS=$((ERRORS + ERR_COUNT))
+    > "$BATCH_FILE"
+    show_progress "$i" "$DOC_COUNT" "$START_TIME"
   fi
 done
 
 # Flush remaining
-if [[ -s "$PIPE_FILE" ]]; then
-  redis-cli -u "$URI" --pipe < "$PIPE_FILE" 2>&1 | tail -1
+if [[ -s "$BATCH_FILE" ]]; then
+  RESULT=$(redis-cli -u "$URI" < "$BATCH_FILE" 2>&1)
+  ERR_COUNT=$(echo "$RESULT" | grep -ci "err" || true)
+  ERRORS=$((ERRORS + ERR_COUNT))
 fi
-rm -f "$PIPE_FILE"
+rm -f "$BATCH_FILE"
+
+show_progress "$DOC_COUNT" "$DOC_COUNT" "$START_TIME"
 
 END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))
 
 echo ""
 echo ""
-echo "Data population complete."
-echo "  Documents loaded: $DOC_COUNT"
-echo "  Time taken: ${ELAPSED}s"
+echo "════════════════════════════════════════════"
+echo "  Data population complete."
+echo "  Documents sent:  $DOC_COUNT"
+echo "  Errors:          $ERRORS"
+echo "  Time taken:      ${ELAPSED}s"
+if [[ $ELAPSED -gt 0 ]]; then
+  echo "  Avg rate:        $((DOC_COUNT / ELAPSED)) keys/s"
+fi
+echo "════════════════════════════════════════════"
 echo ""
 
 # Verify
-echo "Verifying..."
-DBSIZE=$(redis-cli -u "$URI" DBSIZE 2>/dev/null)
-echo "  DBSIZE: $DBSIZE"
+DBSIZE_AFTER=$(redis-cli -u "$URI" DBSIZE 2>/dev/null)
+echo "DBSIZE after: $DBSIZE_AFTER"
+echo ""
 
-# Spot check a random doc
-SAMPLE_KEY="product:$((RANDOM % DOC_COUNT + 1))"
-echo "  Sample ($SAMPLE_KEY):"
-redis-cli -u "$URI" HGETALL "$SAMPLE_KEY" 2>/dev/null | head -20
+# Spot check 3 random docs
+echo "Spot check:"
+for s in 1 $((DOC_COUNT / 2)) $DOC_COUNT; do
+  echo "  product:${s} ->"
+  redis-cli -u "$URI" HGETALL "product:${s}" 2>/dev/null | paste - - | head -4
+  echo ""
+done
 } 2>&1 | tee "$OUTFILE"
 
 echo -e "${GREEN}Output saved to: ${OUTFILE}${NC}"
