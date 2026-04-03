@@ -11,6 +11,11 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+# ── System resource detection (available at source-time) ─────────────
+CPUS="${CPUS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
+HALF_MEM_KB="${HALF_MEM_KB:-$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || sysctl -n hw.memsize 2>/dev/null | awk '{print int($1/1024)}' || echo 4194304) / 2 ))}"
+export CPUS HALF_MEM_KB
+
 # ── Prompt helper ────────────────────────────────────────────────────
 # Usage: prompt_param "VARNAME" "Label" "default_value"
 # If env var is already set, uses that. Otherwise asks interactively.
@@ -51,10 +56,11 @@ prompt_uri() {
 }
 
 # ── Full interactive config ──────────────────────────────────────────
-# Call with: configure_params <default_pipeline> <default_key_min> <default_key_max> <default_key_pattern> <default_data_size> <default_test_time>
+# Call with: configure_params <default_pipeline> <default_key_min> <default_key_max> <default_key_pattern> <default_data_size> <default_test_time> [default_threads] [default_clients]
 configure_params() {
   local def_pipeline="${1:-1}" def_key_min="${2:-1}" def_key_max="${3:-2000000}"
   local def_key_pattern="${4:-R:R}" def_data_size="${5:-256}" def_test_time="${6:-60}"
+  local def_threads="${7:-$CPUS}" def_clients="${8:-$(( CPUS * 2 ))}"
 
   prompt_uri
 
@@ -65,13 +71,10 @@ configure_params() {
   prompt_param KEY_PATTERN    "key-pattern"   "$def_key_pattern"
   prompt_param DATA_SIZE      "data-size"     "$def_data_size"
   prompt_param TEST_TIME      "test-time"     "$def_test_time"
+  prompt_param THREADS        "threads"       "$def_threads"
+  prompt_param CLIENTS        "clients"       "$def_clients"
 
-  export PIPELINE KEY_MINIMUM KEY_MAXIMUM KEY_PATTERN DATA_SIZE TEST_TIME
-
-  # Docker resource defaults
-  CPUS="$(nproc)"
-  HALF_MEM_KB="$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 2 ))"
-  export CPUS HALF_MEM_KB
+  export PIPELINE KEY_MINIMUM KEY_MAXIMUM KEY_PATTERN DATA_SIZE TEST_TIME THREADS CLIENTS
 
   printf "\n${BOLD}Final Config:${NC}\n"
   printf "  URI          = ${GREEN}%s${NC}\n" "$URI"
@@ -81,7 +84,8 @@ configure_params() {
   printf "  key-pattern  = ${GREEN}%s${NC}\n" "$KEY_PATTERN"
   printf "  data-size    = ${GREEN}%s${NC}\n" "$DATA_SIZE"
   printf "  test-time    = ${GREEN}%s${NC}\n" "$TEST_TIME"
-  printf "  threads      = ${GREEN}%s${NC} (auto)\n" "$CPUS"
+  printf "  threads      = ${GREEN}%s${NC}\n" "$THREADS"
+  printf "  clients      = ${GREEN}%s${NC}\n" "$CLIENTS"
   echo ""
 
   printf "Proceed? [Y/n]: "

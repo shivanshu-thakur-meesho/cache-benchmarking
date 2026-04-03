@@ -3,7 +3,7 @@
 # Run AFTER stress_2k.sh
 # Defaults: pipeline=1, key-min=1, key-max=2M, data-size=4096, test-time=300
 source "$(dirname "$0")/../../lib/config.sh"
-configure_params 1 1 2000000 "R:R" 4096 300
+configure_params 1 1 2000000 "R:R" 4096 300 "$CPUS"
 
 run_memtier "standalone_eviction_stress_4k" \
   docker run --rm --network=host \
@@ -12,8 +12,8 @@ run_memtier "standalone_eviction_stress_4k" \
   --memory-swap="${HALF_MEM_KB}k" \
   redislabs/memtier_benchmark:latest \
   -u "$URI" --protocol=redis \
-  --threads="$CPUS" \
-  --clients="$(( CPUS * 2 ))" \
+  --threads="$THREADS" \
+  --clients="$CLIENTS" \
   --pipeline="$PIPELINE" \
   --key-minimum="$KEY_MINIMUM" \
   --key-maximum="$KEY_MAXIMUM" \

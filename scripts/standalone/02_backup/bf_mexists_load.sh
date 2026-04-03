@@ -15,7 +15,8 @@ prompt_param TEST_TIME      "test-time"      "300"
 
 export BF_FILL_CAP PIPELINE TEST_TIME
 
-CPUS="$(nproc)"
+THREADS="${THREADS:-$CPUS}"
+CLIENTS="${CLIENTS:-$CPUS}"
 HALF_MEM_KB="$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 2 ))"
 
 setup_result_dir
@@ -39,8 +40,8 @@ for i in $(seq -w 1 10); do
     --command-key-pattern=R \
     --key-minimum=1 \
     --key-maximum="$BF_FILL_CAP" \
-    --threads="$CPUS" \
-    --clients="$CPUS" \
+    --threads="$THREADS" \
+    --clients="$CLIENTS" \
     --pipeline="$PIPELINE" \
     --test-time="$TEST_TIME" \
     --hide-histogram &

@@ -2,7 +2,7 @@
 # In-Memory Performance: SET commands (cluster)
 # Defaults: pipeline=1, key-min=1, key-max=2M, data-size=256, test-time=60
 source "$(dirname "$0")/../../lib/config.sh"
-configure_params 1 1 2000000 "R:R" 256 60
+configure_params 1 1 2000000 "R:R" 256 60 "$CPUS"
 
 run_memtier "cluster_inmemory_set" \
   docker run --rm --network=host \
@@ -12,8 +12,8 @@ run_memtier "cluster_inmemory_set" \
   redislabs/memtier_benchmark:latest \
   -u "$URI" --protocol=redis \
   --cluster-mode \
-  --threads="$CPUS" \
-  --clients="$(( CPUS * 2 ))" \
+  --threads="$THREADS" \
+  --clients="$CLIENTS" \
   --pipeline="$PIPELINE" \
   --key-minimum="$KEY_MINIMUM" \
   --key-maximum="$KEY_MAXIMUM" \

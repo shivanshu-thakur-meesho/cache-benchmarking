@@ -11,7 +11,8 @@ prompt_param TEST_TIME      "test-time"      "300"
 
 export BF_FILL_CAP PIPELINE TEST_TIME
 
-CPUS="$(nproc)"
+THREADS="${THREADS:-$CPUS}"
+CLIENTS="${CLIENTS:-$CPUS}"
 
 setup_result_dir
 OUTFILE="$RESULTS_DIR/cluster_backup_bf_exists.txt"
@@ -35,8 +36,8 @@ for i in $(seq -w 1 10); do
     --command-key-pattern=R \
     --key-minimum=1 \
     --key-maximum="$BF_FILL_CAP" \
-    --threads="$CPUS" \
-    --clients="$CPUS" \
+    --threads="$THREADS" \
+    --clients="$CLIENTS" \
     --pipeline="$PIPELINE" \
     --test-time="$TEST_TIME" \
     --hide-histogram &

@@ -26,9 +26,28 @@ show_banner() {
 
 # ── Resume session picker ────────────────────────────────────────────
 handle_resume() {
-  local results_base="${PROJECT_ROOT}/results"
+  local search_paths=("${PROJECT_ROOT}/results" "${SCRIPT_DIR}/results")
+  local dirs=()
+  local seen=()
 
-  if [[ ! -d "$results_base" ]] || [[ -z "$(ls -A "$results_base" 2>/dev/null)" ]]; then
+  for results_base in "${search_paths[@]}"; do
+    if [[ -d "$results_base" ]]; then
+      for d in "$results_base"/*/; do
+        if [[ -d "$d" ]]; then
+          local abs_path="$(cd "$d" && pwd)"
+          local already=0
+          for s in "${seen[@]+"${seen[@]}"}"; do
+            if [[ "$s" == "$abs_path" ]]; then already=1; break; fi
+          done
+          if [[ $already -eq 1 ]]; then continue; fi
+          seen+=("$abs_path")
+          dirs+=("$abs_path")
+        fi
+      done
+    fi
+  done
+
+  if [[ ${#dirs[@]} -eq 0 ]]; then
     echo -e "  ${RED}No previous sessions found.${NC}"
     return 1
   fi
@@ -37,16 +56,12 @@ handle_resume() {
   echo -e "${BOLD}Previous sessions:${NC}"
   echo ""
 
-  local dirs=()
   local idx=1
-  for d in "$results_base"/*/; do
-    if [[ -d "$d" ]]; then
-      local name=$(basename "$d")
-      local count=$(ls "$d"/*.txt 2>/dev/null | wc -l | tr -d ' ')
-      echo "  $idx) $name  ($count result files)"
-      dirs+=("$d")
-      idx=$((idx + 1))
-    fi
+  for d in "${dirs[@]}"; do
+    local name=$(basename "$d")
+    local count=$(ls "$d"/*.txt 2>/dev/null | wc -l | tr -d ' ')
+    echo "  $idx) $name  ($count result files)  [$d]"
+    idx=$((idx + 1))
   done
 
   echo ""
@@ -54,7 +69,7 @@ handle_resume() {
   read -r sel
 
   if [[ "$sel" -ge 1 && "$sel" -le ${#dirs[@]} ]] 2>/dev/null; then
-    RESULTS_DIR="$(cd "${dirs[$((sel-1))]}" && pwd)"
+    RESULTS_DIR="${dirs[$((sel-1))]}"
     export RESULTS_DIR
     echo ""
     echo -e "${GREEN}Resumed session: $(basename "$RESULTS_DIR")${NC}"
@@ -289,27 +304,44 @@ handle_cluster() {
 
 # ── Report generation ────────────────────────────────────────────────
 handle_report() {
-  local results_base="$SCRIPT_DIR/../results"
+  # Scan both possible results locations (project root and scripts/ for legacy runs)
+  local search_paths=("${PROJECT_ROOT}/results" "${SCRIPT_DIR}/results")
+  local dirs=()
+  local seen=()
+
   echo ""
   echo -e "${BOLD}Available result directories:${NC}"
   echo ""
 
-  if [[ ! -d "$results_base" ]] || [[ -z "$(ls -A "$results_base" 2>/dev/null)" ]]; then
-    echo -e "  ${RED}No results found in $results_base${NC}"
-    echo "  Run some benchmarks first."
+  for results_base in "${search_paths[@]}"; do
+    if [[ -d "$results_base" ]]; then
+      for d in "$results_base"/*/; do
+        if [[ -d "$d" ]]; then
+          local abs_path="$(cd "$d" && pwd)"
+          # Skip duplicates
+          local already=0
+          for s in "${seen[@]+"${seen[@]}"}"; do
+            if [[ "$s" == "$abs_path" ]]; then already=1; break; fi
+          done
+          if [[ $already -eq 1 ]]; then continue; fi
+          seen+=("$abs_path")
+          dirs+=("$abs_path")
+        fi
+      done
+    fi
+  done
+
+  if [[ ${#dirs[@]} -eq 0 ]]; then
+    echo -e "  ${RED}No results found. Run some benchmarks first.${NC}"
     return
   fi
 
-  local dirs=()
   local idx=1
-  for d in "$results_base"/*/; do
-    if [[ -d "$d" ]]; then
-      local name=$(basename "$d")
-      local count=$(ls "$d"/*.txt 2>/dev/null | wc -l | tr -d ' ')
-      echo "  $idx) $name  ($count result files)"
-      dirs+=("$d")
-      idx=$((idx + 1))
-    fi
+  for d in "${dirs[@]}"; do
+    local name=$(basename "$d")
+    local count=$(ls "$d"/*.txt 2>/dev/null | wc -l | tr -d ' ')
+    echo "  $idx) $name  ($count result files)  [$d]"
+    idx=$((idx + 1))
   done
 
   echo ""

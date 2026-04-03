@@ -5,7 +5,16 @@
       "WebSearch",
       "WebFetch(domain:www.dragonflydb.io)",
       "WebFetch(domain:github.com)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "mcp__mcp-logseq__get_page_content",
+      "mcp__mcp-logseq__create_page",
+      "mcp__mcp-logseq__update_block",
+      "mcp__mcp-logseq__insert_nested_block",
+      "Bash(grep -rn 'clients=\"\"\\\\$\\(\\( CPUS \\\\* 2 \\)\\)\"\"' scripts/ --include=\"*.sh\" -l)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "mcp-logseq"
+  ]
 }

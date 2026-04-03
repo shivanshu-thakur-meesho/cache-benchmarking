@@ -15,7 +15,8 @@ prompt_param TEST_TIME      "test-time"      "120"
 
 export BF_ERROR_RATE BF_CAPACITY BF_FILL_CAP TEST_TIME
 
-CPUS="$(nproc)"
+THREADS="${THREADS:-$CPUS}"
+CLIENTS="${CLIENTS:-$CPUS}"
 HALF_MEM_KB="$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 2 ))"
 
 setup_result_dir
@@ -47,8 +48,8 @@ for i in $(seq -w 1 10); do
     --command-ratio=1 \
     --key-minimum=1 \
     --key-maximum="$BF_FILL_CAP" \
-    --threads="$CPUS" \
-    --clients="$(( CPUS * 2 ))" \
+    --threads="$THREADS" \
+    --clients="$CLIENTS" \
     --pipeline=1 \
     --test-time="$TEST_TIME" \
     --hide-histogram

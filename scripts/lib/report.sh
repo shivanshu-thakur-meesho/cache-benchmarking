@@ -12,7 +12,13 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 # ── Parse a single memtier result file ───────────────────────────────
-# Extracts: Ops/sec, P99, P99.9, Hits, Misses
+# Extracts: Ops/sec, P99, P99.9, Avg Latency
+#
+# memtier outputs two different column layouts:
+#   Standard (Sets/Gets):  Type  Ops/sec  Hits/sec  Misses/sec  Avg  p50  p99  p99.9  KB/sec  (9 cols)
+#   Custom commands (Mgets): Type  Ops/sec  Avg  p50  p99  p99.9  KB/sec  (7 cols)
+#
+# We detect the layout by counting columns on the Totals line.
 parse_result() {
   local file="$1"
   if [[ ! -f "$file" ]]; then
@@ -21,29 +27,46 @@ parse_result() {
   fi
 
   local ops p99 p999 avg_latency
+  local totals_line
+  totals_line=$(grep -E "^Totals" "$file" | tail -1 || true)
 
-  # Try to extract from the TOTALS line (last summary)
-  # memtier format: Type Ops/sec Hits/sec Misses/sec Avg. Latency p50 Latency p99 Latency p99.9 Latency KB/sec
-  ops=$(grep -E "^Totals" "$file" | tail -1 | awk '{print $2}' || echo "N/A")
-  avg_latency=$(grep -E "^Totals" "$file" | tail -1 | awk '{print $5}' || echo "N/A")
-  p99=$(grep -E "^Totals" "$file" | tail -1 | awk '{print $7}' || echo "N/A")
-  p999=$(grep -E "^Totals" "$file" | tail -1 | awk '{print $8}' || echo "N/A")
+  if [[ -n "$totals_line" ]]; then
+    local ncols
+    ncols=$(echo "$totals_line" | awk '{print NF}')
+
+    ops=$(echo "$totals_line" | awk '{print $2}')
+
+    if [[ "$ncols" -ge 9 ]]; then
+      # Standard layout: Type Ops/sec Hits/sec Misses/sec Avg p50 p99 p99.9 KB/sec
+      avg_latency=$(echo "$totals_line" | awk '{print $5}')
+      p99=$(echo "$totals_line" | awk '{print $7}')
+      p999=$(echo "$totals_line" | awk '{print $8}')
+    else
+      # Custom command layout (mget etc): Type Ops/sec Avg p50 p99 p99.9 KB/sec
+      avg_latency=$(echo "$totals_line" | awk '{print $3}')
+      p99=$(echo "$totals_line" | awk '{print $5}')
+      p999=$(echo "$totals_line" | awk '{print $6}')
+    fi
+  fi
 
   # If no Totals line, try run_search_bench output format
-  if [[ -z "$ops" || "$ops" == "N/A" ]]; then
+  if [[ -z "${ops:-}" || "$ops" == "N/A" ]]; then
     ops=$(grep -oP 'Ops/sec:\s*\K[\d.]+' "$file" | tail -1 || echo "N/A")
     p99=$(grep -oP 'p99 Latency:\s*\K[\d.]+' "$file" | tail -1 || echo "N/A")
     p999=$(grep -oP 'p99\.9 Lat:\s*\K[\d.]+' "$file" | tail -1 || echo "N/A")
     avg_latency=$(grep -oP 'Avg Latency:\s*\K[\d.]+' "$file" | tail -1 || echo "N/A")
   fi
 
-  echo "${ops}|${p99}|${p999}|${avg_latency}"
+  echo "${ops:-N/A}|${p99:-N/A}|${p999:-N/A}|${avg_latency:-N/A}"
 }
 
 # ── Generate full report ─────────────────────────────────────────────
 generate_report() {
-  local results_dir="$1"
-  local report_file="${results_dir}/benchmark_report.md"
+  local results_dir
+  results_dir="$(cd "$1" && pwd)"  # resolve to clean absolute path
+  local session_name
+  session_name="$(basename "$results_dir")"
+  local report_file="${results_dir}/benchmark_report_${session_name}.md"
 
   if [[ ! -d "$results_dir" ]]; then
     echo "Results directory not found: $results_dir"

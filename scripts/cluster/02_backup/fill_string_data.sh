@@ -2,7 +2,7 @@
 # Backup Test: Fill cache with string data (cluster)
 # Defaults: pipeline=10, key-min=300M, key-max=350M, data-size=4096, test-time=600
 source "$(dirname "$0")/../../lib/config.sh"
-configure_params 10 300000000 350000000 "R:R" 4096 600
+configure_params 10 300000000 350000000 "R:R" 4096 600 "$(( CPUS * 2 ))" "$(( CPUS * 4 ))"
 
 run_memtier "cluster_backup_fill_string" \
   docker run --rm --network=host \
@@ -12,8 +12,8 @@ run_memtier "cluster_backup_fill_string" \
   redislabs/memtier_benchmark:latest \
   -u "$URI" --protocol=redis \
   --cluster-mode \
-  --threads="$(( CPUS * 2 ))" \
-  --clients="$(( CPUS * 4 ))" \
+  --threads="$THREADS" \
+  --clients="$CLIENTS" \
   --pipeline="$PIPELINE" \
   --key-minimum="$KEY_MINIMUM" \
   --key-maximum="$KEY_MAXIMUM" \
