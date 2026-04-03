@@ -26,26 +26,16 @@ show_banner() {
 
 # ── Resume session picker ────────────────────────────────────────────
 handle_resume() {
-  local search_paths=("${PROJECT_ROOT}/results" "${SCRIPT_DIR}/results")
+  local results_base="${PROJECT_ROOT}/results"
   local dirs=()
-  local seen=()
 
-  for results_base in "${search_paths[@]}"; do
-    if [[ -d "$results_base" ]]; then
-      for d in "$results_base"/*/; do
-        if [[ -d "$d" ]]; then
-          local abs_path="$(cd "$d" && pwd)"
-          local already=0
-          for s in "${seen[@]+"${seen[@]}"}"; do
-            if [[ "$s" == "$abs_path" ]]; then already=1; break; fi
-          done
-          if [[ $already -eq 1 ]]; then continue; fi
-          seen+=("$abs_path")
-          dirs+=("$abs_path")
-        fi
-      done
-    fi
-  done
+  if [[ -d "$results_base" ]]; then
+    for d in "$results_base"/*/; do
+      if [[ -d "$d" ]]; then
+        dirs+=("$(cd "$d" && pwd)")
+      fi
+    done
+  fi
 
   if [[ ${#dirs[@]} -eq 0 ]]; then
     echo -e "  ${RED}No previous sessions found.${NC}"
@@ -304,32 +294,20 @@ handle_cluster() {
 
 # ── Report generation ────────────────────────────────────────────────
 handle_report() {
-  # Scan both possible results locations (project root and scripts/ for legacy runs)
-  local search_paths=("${PROJECT_ROOT}/results" "${SCRIPT_DIR}/results")
+  local results_base="${PROJECT_ROOT}/results"
   local dirs=()
-  local seen=()
 
   echo ""
   echo -e "${BOLD}Available result directories:${NC}"
   echo ""
 
-  for results_base in "${search_paths[@]}"; do
-    if [[ -d "$results_base" ]]; then
-      for d in "$results_base"/*/; do
-        if [[ -d "$d" ]]; then
-          local abs_path="$(cd "$d" && pwd)"
-          # Skip duplicates
-          local already=0
-          for s in "${seen[@]+"${seen[@]}"}"; do
-            if [[ "$s" == "$abs_path" ]]; then already=1; break; fi
-          done
-          if [[ $already -eq 1 ]]; then continue; fi
-          seen+=("$abs_path")
-          dirs+=("$abs_path")
-        fi
-      done
-    fi
-  done
+  if [[ -d "$results_base" ]]; then
+    for d in "$results_base"/*/; do
+      if [[ -d "$d" ]]; then
+        dirs+=("$(cd "$d" && pwd)")
+      fi
+    done
+  fi
 
   if [[ ${#dirs[@]} -eq 0 ]]; then
     echo -e "  ${RED}No results found. Run some benchmarks first.${NC}"
